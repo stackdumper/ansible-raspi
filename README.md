@@ -16,3 +16,6 @@ users:
 ```bash
 ansible-playbook pb-raspi.yml --ask-pass # default is "raspberry"
 ```
+
+### License
+MIT
