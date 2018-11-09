@@ -1,0 +1,77 @@
+- hosts: all
+  become: true
+
+  vars_files:
+    - users.yml # users
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400 # 1 day
+
+    - name: Install packages
+      apt:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+        - git
+        - zsh
+    - name: Configure system
+      block:
+        - name: Configure sshd_config
+          template:
+            src: templates/sshd_config
+            dest: /etc/ssh/sshd_config
+
+    - name: Setup users
+      block:
+        - name: Create users
+          user:
+            name: "{{ item.name }}"
+            password: "{{ item.password | password_hash('sha256') }}"
+            shell: /usr/bin/zsh
+          with_items: "{{ users }}"
+          no_log: true
+
+        - name: Setup oh-my-zsh
+          block:
+            - name: Download zsh installer
+              get_url:
+                url: https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh
+                dest: /tmp/zsh-installer.sh
+                mode: a+x
+
+            - name: Execute the zsh-installer.sh for every user
+              shell: sudo -H -u {{ item.name }} /tmp/zsh-installer.sh
+              with_items: "{{ users }}"
+              no_log: true
+
+            - name: Remove the zsh-installer.sh
+              file:
+                path: /tmp/zsh-installer.sh
+                state: absent
+
+            - name: Setup spaceship-zsh-theme
+              get_url:
+                url: https://raw.githubusercontent.com/denysdovhan/spaceship-zsh-theme/master/spaceship.zsh
+                dest: "/home/{{ item.name }}/.oh-my-zsh/custom/themes/spaceship.zsh-theme"
+              with_items: "{{ users }}"
+              no_log: true
+
+            - name: Clone spaceship-zsh-theme
+              git:
+                repo: https://github.com/denysdovhan/spaceship-prompt.git
+                dest: "/home/{{ item.name }}/.oh-my-zsh/custom/themes/spaceship-prompt"
+              with_items: "{{ users }}"
+              no_log: true
+
+            - name: Copy .zshrc for each user
+              template:
+                src: templates/.zshrc
+                dest: /home/{{ item.name }}/.zshrc
+                owner: "{{ item.name }}"
+                mode: 0600
+              with_items: "{{ users }}"
+              no_log: true
